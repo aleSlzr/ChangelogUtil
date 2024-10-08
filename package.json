@@ -1,0 +1,22 @@
+{
+  "name": "aliaslzr.utils",
+  "version": "1.0.0",
+  "description": "A changelog util to show all the features, bugfixes, improvements, etc  applied to a project",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aleSlzr/ChangelogUtil.git"
+  },
+  "keywords": [
+    "changelog"
+  ],
+  "author": "Alejandro Salazar Cruz",
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "marked": "^14.0.0",
+    "prompts": "^2.4.2"
+  }
+}
