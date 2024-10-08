@@ -1,7 +1,8 @@
-const { prompt } = require("prompts");
 const fs = require("fs");
 const path = require("path");
 const marked = require("marked");
+const { prompt } = require("prompts");
+const { Transform } = require("stream");
 
 let questions;
 const EOL = "\n";
@@ -26,6 +27,15 @@ const PromptName = {
   PULL_REQUEST: "issue-pull-request",
   CHANGELOG_MESSAGE: "issue-changelog-message",
   ISSUE_TYPE: "issue-type",
+};
+const SpecialItems = {
+  SINGLE_HASH: "#",
+  DOUBLE_HASH: "##",
+  SPACE_HASH: "# ",
+  EMPTY_SPACE: " ",
+  ENCODING: "utf8",
+  WRITE_FLAG: "w",
+  SIMPLE_DASH: "-",
 };
 
 (async function () {
@@ -85,72 +95,68 @@ function cleanup() {
   clearInterval(questions);
 }
 
-function isUnpublishedHeadToken(token) {
-  return (
-    token.type === "heading" &&
-    token.depth === 2 &&
-    token.text === UNPUBLISHED_CHANGES
-  );
-}
-
-function searchIssueType() {
-  return "";
-}
-
 function createChangelogEntry(answers) {
   const message = answers[PromptName.CHANGELOG_MESSAGE];
   const issue = answers[PromptName.TICKET];
   const pullRequest = answers[PromptName.PULL_REQUEST];
   const issueType = answers[PromptName.ISSUE_TYPE];
-  const logEntry = `- ${message} ([ABC-${issue}](https://url.to.jira.or.something/${issue}), [#${pullRequest}](https://github.com/repository/pull/${pullRequest}) by [@aleSlzr](https://github.com/aleSlzr)).\n\n`;
+  const logEntry = `- ${message} ([${issue}](https://url.to.jira.or.something/${issue}), [#${pullRequest}](https://github.com/repository/pull/${pullRequest}) by [@aleSlzr](https://github.com/aleSlzr)).${EOL}${EOL}`;
   var unpublishedFlag = true;
 
   // use this -> path.join(ROOT_PATH, "./CHANGELOG.md") because CHANGELOG.md file
   // is in the root of the main project
-  var changelogReadStream = fs.createReadStream("./CHANGELOG.md", "utf8");
-
-  var changelogWriteStream = fs.createWriteStream("./CHANGELOG_temp.md", {
-    flags: "w",
-    encoding: "utf8",
+  const changelogReadStream = fs.createReadStream(
+    "./CHANGELOG.md",
+    SpecialItems.ENCODING
+  );
+  const changelogWriteStream = fs.createWriteStream("./CHANGELOG_temp.md", {
+    flags: SpecialItems.WRITE_FLAG,
+    encoding: SpecialItems.ENCODING,
   });
+
+  const addEntryChangelog = new Transform({
+    transform(data, encoding, callback) {
+      let changelogArray = data.toString().split(SpecialItems.DOUBLE_HASH);
+      let issue = issueType.split(SpecialItems.SIMPLE_DASH)[0];
+      for (let item in changelogArray) {
+        let changelogItem = changelogArray[item];
+        let isIssueIncluded = changelogItem.toLowerCase().includes(issue);
+        if (isIssueIncluded && unpublishedFlag) {
+          changelogItem = changelogItem + logEntry;
+          unpublishedFlag = false;
+        }
+        let startsEmptySpace = changelogArray[item].startsWith(
+          SpecialItems.EMPTY_SPACE
+        );
+        let startWithHashMark = changelogArray[item].startsWith(
+          SpecialItems.SPACE_HASH
+        );
+        if (startsEmptySpace || startWithHashMark) {
+          changelogItem = `${SpecialItems.DOUBLE_HASH}${changelogItem}`;
+        }
+        if (changelogItem.includes("Changelog")) {
+          changelogItem = changelogItem.slice(
+            -Math.abs(changelogItem.length) + 2
+          );
+        }
+        this.push(changelogItem);
+      }
+      callback();
+    },
+  });
+
+  changelogReadStream
+    .pipe(addEntryChangelog)
+    .pipe(changelogWriteStream)
+    .on("finish", () => {
+      console.log("Data emitted and writed");
+    });
 
   changelogReadStream.on("error", (error) => {
     console.log("Error" + error);
   });
 
-  changelogReadStream.on("data", (data) => {
-    let changelogArray = data.split("##");
-    let issue = issueType.split("-")[0];
-    for (let item in changelogArray) {
-      let changelogItem = changelogArray[item];
-      let isIssueIncluded = changelogItem.toLowerCase().includes(issue);
-      if (isIssueIncluded && unpublishedFlag) {
-        changelogItem = changelogItem + logEntry;
-        unpublishedFlag = false;
-      }
-      let startsEmptySpace = changelogArray[item].startsWith(" ");
-      let startWithHashMark = changelogArray[item].startsWith("# ");
-      if (startsEmptySpace || startWithHashMark) {
-        changelogItem = `##${changelogItem}`;
-      }
-      if (changelogItem.includes("Changelog")) {
-        changelogItem = changelogItem.slice(
-          -Math.abs(changelogItem.length) + 2
-        );
-      }
-      changelogWriteStream.write(changelogItem);
-    }
-  });
-
-  changelogReadStream.on("end", () => {
-    console.log("File readed");
-  });
-
   changelogReadStream.on("close", () => {
     console.log("File closed");
-  });
-
-  changelogWriteStream.on("close", () => {
-    console.log("Changelog writted");
   });
 }
