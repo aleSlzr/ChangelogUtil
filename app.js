@@ -97,9 +97,10 @@ function cleanup() {
 
 function createChangelogEntry(answers) {
   const { issueType, logEntry } = generateItemChangelogEntry(answers);
-
   // use this -> path.join(ROOT_PATH, "./CHANGELOG.md") because CHANGELOG.md file
   // is in the root of the main project
+  // for testing purposes this is included here, also it can help to create a
+  // CHANGELOG.md file for the main project
   const changelogReadStream = fs.createReadStream(
     "./CHANGELOG.md",
     SpecialItems.ENCODING
@@ -109,7 +110,22 @@ function createChangelogEntry(answers) {
     encoding: SpecialItems.ENCODING,
   });
 
-  const addEntryChangelog = new Transform({
+  const addEntryChangelogStream = tranformChangelogEntry(issueType, logEntry);
+
+  changelogReadStream.on("error", (error) => {
+    console.log("ErrorReadingFile: " + error);
+  });
+
+  changelogReadStream
+    .pipe(addEntryChangelogStream)
+    .pipe(changelogWriteStream)
+    .on("finish", () => {
+      console.log("Data emitted and writted");
+    });
+}
+
+function tranformChangelogEntry(issueType, logEntry) {
+  return new Transform({
     transform(data, encoding, callback) {
       let unpublishedFlag = true;
       let issue = issueType.split(SpecialItems.SIMPLE_DASH)[0];
@@ -143,21 +159,6 @@ function createChangelogEntry(answers) {
       callback();
     },
   });
-
-  changelogReadStream.on("error", (error) => {
-    console.log("ErrorReadingFile: " + error);
-  });
-
-  changelogReadStream.on("close", () => {
-    console.log("File closed");
-  });
-
-  changelogReadStream
-    .pipe(addEntryChangelog)
-    .pipe(changelogWriteStream)
-    .on("finish", () => {
-      console.log("Data emitted and writted");
-    });
 }
 
 function insertEntryInUnpublishedSection(
