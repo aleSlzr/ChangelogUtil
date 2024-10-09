@@ -96,12 +96,7 @@ function cleanup() {
 }
 
 function createChangelogEntry(answers) {
-  const message = answers[PromptName.CHANGELOG_MESSAGE];
-  const issue = answers[PromptName.TICKET];
-  const pullRequest = answers[PromptName.PULL_REQUEST];
-  const issueType = answers[PromptName.ISSUE_TYPE];
-  const logEntry = `- ${message} ([${issue}](https://url.to.jira.or.something/${issue}), [#${pullRequest}](https://github.com/repository/pull/${pullRequest}) by [@aleSlzr](https://github.com/aleSlzr)).${EOL}${EOL}`;
-  var unpublishedFlag = true;
+  const { issueType, logEntry } = generateItemChangelogEntry(answers);
 
   // use this -> path.join(ROOT_PATH, "./CHANGELOG.md") because CHANGELOG.md file
   // is in the root of the main project
@@ -116,47 +111,91 @@ function createChangelogEntry(answers) {
 
   const addEntryChangelog = new Transform({
     transform(data, encoding, callback) {
-      let changelogArray = data.toString().split(SpecialItems.DOUBLE_HASH);
+      let unpublishedFlag = true;
       let issue = issueType.split(SpecialItems.SIMPLE_DASH)[0];
+      let changelogArray = data.toString().split(SpecialItems.DOUBLE_HASH);
+
       for (let item in changelogArray) {
         let changelogItem = changelogArray[item];
         let isIssueIncluded = changelogItem.toLowerCase().includes(issue);
-        if (isIssueIncluded && unpublishedFlag) {
-          changelogItem = changelogItem + logEntry;
-          unpublishedFlag = false;
-        }
-        let startsEmptySpace = changelogArray[item].startsWith(
+        let startsEmptySpace = changelogItem.startsWith(
           SpecialItems.EMPTY_SPACE
         );
-        let startWithHashMark = changelogArray[item].startsWith(
+        let startWithHashMark = changelogItem.startsWith(
           SpecialItems.SPACE_HASH
         );
-        if (startsEmptySpace || startWithHashMark) {
-          changelogItem = `${SpecialItems.DOUBLE_HASH}${changelogItem}`;
-        }
-        if (changelogItem.includes("Changelog")) {
-          changelogItem = changelogItem.slice(
-            -Math.abs(changelogItem.length) + 2
-          );
-        }
+
+        ({ unpublishedFlag, changelogItem } = insertEntryInUnpublishedSection(
+          isIssueIncluded,
+          unpublishedFlag,
+          changelogItem,
+          logEntry
+        ));
+
+        changelogItem = addDoubleDashInItems(
+          startsEmptySpace,
+          startWithHashMark,
+          changelogItem
+        );
+        changelogItem = removeExtraDashInHeaderTitle(changelogItem);
         this.push(changelogItem);
       }
       callback();
     },
   });
 
-  changelogReadStream
-    .pipe(addEntryChangelog)
-    .pipe(changelogWriteStream)
-    .on("finish", () => {
-      console.log("Data emitted and writed");
-    });
-
   changelogReadStream.on("error", (error) => {
-    console.log("Error" + error);
+    console.log("ErrorReadingFile: " + error);
   });
 
   changelogReadStream.on("close", () => {
     console.log("File closed");
   });
+
+  changelogReadStream
+    .pipe(addEntryChangelog)
+    .pipe(changelogWriteStream)
+    .on("finish", () => {
+      console.log("Data emitted and writted");
+    });
+}
+
+function insertEntryInUnpublishedSection(
+  isIssueIncluded,
+  unpublishedFlag,
+  changelogItem,
+  logEntry
+) {
+  if (isIssueIncluded && unpublishedFlag) {
+    changelogItem = changelogItem + logEntry;
+    unpublishedFlag = false;
+  }
+  return { unpublishedFlag, changelogItem };
+}
+
+function addDoubleDashInItems(
+  startsEmptySpace,
+  startWithHashMark,
+  changelogItem
+) {
+  if (startsEmptySpace || startWithHashMark) {
+    changelogItem = `${SpecialItems.DOUBLE_HASH}${changelogItem}`;
+  }
+  return changelogItem;
+}
+
+function removeExtraDashInHeaderTitle(changelogItem) {
+  if (changelogItem.includes("Changelog")) {
+    changelogItem = changelogItem.slice(-Math.abs(changelogItem.length) + 2);
+  }
+  return changelogItem;
+}
+
+function generateItemChangelogEntry(answers) {
+  const message = answers[PromptName.CHANGELOG_MESSAGE];
+  const issue = answers[PromptName.TICKET];
+  const pullRequest = answers[PromptName.PULL_REQUEST];
+  const issueType = answers[PromptName.ISSUE_TYPE];
+  const logEntry = `- ${message} ([${issue}](https://url.to.jira.or.something/${issue}), [#${pullRequest}](https://github.com/repository/pull/${pullRequest}) by [@aleSlzr](https://github.com/aleSlzr)).${EOL}${EOL}`;
+  return { issueType, logEntry };
 }
