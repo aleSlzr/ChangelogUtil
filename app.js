@@ -121,7 +121,21 @@ function createChangelogEntry(answers) {
     .pipe(changelogWriteStream)
     .on("finish", () => {
       console.log("Data emitted and writted");
+      deleteAndRenameChangelog();
     });
+}
+
+function deleteAndRenameChangelog() {
+  fs.unlink("./CHANGELOG.md", (error) => {
+    if (error) {
+      console.log("Error deleting file: " + error);
+    }
+  });
+  fs.rename("./CHANGELOG_temp.md", "./CHANGELOG.md", (error) => {
+    if (error) {
+      console.log("Error renaming file: " + error);
+    }
+  });
 }
 
 function tranformChangelogEntry(issueType, logEntry) {
